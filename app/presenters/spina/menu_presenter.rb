@@ -12,6 +12,7 @@ module Spina
                     :list_item_tag, :list_item_css,
                     :link_tag_css,
                     :active_list_item_css,
+                    :current_list_item_css,
                     :include_drafts,
                     :depth # root nodes are at depth 0
 
@@ -54,10 +55,11 @@ module Spina
         return nil unless item.materialized_path
         children = scoped_collection(item.children)
 
-        active_item_css = nil
-        active_item_css = active_list_item_css if apply_active_css?(item)
+        extra_css = active_list_item_css if apply_active_css?(item)
+        extra_css = current_list_item_css if apply_current_css?(item)
+        item_css = extra_css || list_item_css
 
-        content_tag(list_item_tag, class: active_item_css || list_item_css, data: {page_id: item.page_id, draft: (true if item.draft?) }) do
+        content_tag(list_item_tag, class: item_css, data: {page_id: item.page_id, draft: (true if item.draft?) }) do
           buffer = ActiveSupport::SafeBuffer.new
           buffer << link_to(item.menu_title, item.materialized_path, class: link_tag_css)
           buffer << render_items(children) if render_children?(item) && children.any?
@@ -75,9 +77,18 @@ module Spina
         item.depth < depth
       end
 
-      def apply_active_css?(item)
-        item == Spina::Current.page && active_list_item_css.present?
+      def apply_current_css?(item)
+        item == Spina::Current.page && current_list_item_css.present?
       end
 
+      def apply_active_css?(item)
+        return false if apply_current_css?(item)
+        return is_parent_of_current?(item)
+      end
+
+      def is_parent_of_current?(item)
+        return false unless Spina::Current.page.ancestry.present?
+        Spina::Current.page.ancestry.split('/').map(&:to_i).include? item.id
+      end
   end
 end
